@@ -11,10 +11,9 @@ import {
   Text,
   TextContent,
   TextVariants,
-  WizardContextConsumer,
 } from '@patternfly/react-core';
+import { WizardContextConsumer } from '@patternfly/react-core/deprecated';
 import { SystemsTable } from 'SmartComponents';
-import { GET_SYSTEMS_WITH_POLICIES } from '../SystemsTable/constants';
 import { compose } from 'redux';
 import propTypes from 'prop-types';
 import { connect } from 'react-redux';
@@ -23,7 +22,7 @@ import * as Columns from '../SystemsTable/Columns';
 
 const EmptyState = ({ osMajorVersion }) => (
   <React.Fragment>
-    <TextContent className="pf-u-mb-md">
+    <TextContent className="pf-v5-u-mb-md">
       <Text>
         You do not have any <b>RHEL {osMajorVersion}</b> systems connected to
         Insights and enabled for Compliance.
@@ -31,16 +30,16 @@ const EmptyState = ({ osMajorVersion }) => (
         Policies must be created with at least one system.
       </Text>
     </TextContent>
-    <TextContent className="pf-u-mb-md">
+    <TextContent className="pf-v5-u-mb-md">
       <Text>
-        Choose a different operating system, or connect{' '}
-        <b>RHEL {osMajorVersion}</b> systems to Insights.
+        Choose a different RHEL version, or connect <b>RHEL {osMajorVersion}</b>{' '}
+        systems to Insights.
       </Text>
     </TextContent>
     <WizardContextConsumer>
       {({ goToStepById }) => (
         <Button onClick={() => goToStepById(1)}>
-          Choose a different operating system
+          Choose a different RHEL version
         </Button>
       )}
     </WizardContextConsumer>
@@ -53,7 +52,7 @@ EmptyState.propTypes = {
 
 const PrependComponent = ({ osMajorVersion }) => (
   <React.Fragment>
-    <TextContent className="pf-u-mb-md">
+    <TextContent className="pf-v5-u-mb-md">
       <Text>
         Select which of your <b>RHEL {osMajorVersion}</b> systems should be
         included in this policy.
@@ -83,7 +82,7 @@ export const EditPolicySystems = ({
   );
   return (
     <React.Fragment>
-      <TextContent className="pf-u-mb-md">
+      <TextContent className="pf-v5-u-mb-md">
         <Text component={TextVariants.h1}>Systems</Text>
       </TextContent>
       <Form>
@@ -102,13 +101,16 @@ export const EditPolicySystems = ({
                 },
                 sortBy: ['name'],
               },
+              Columns.inventoryColumn('groups', {
+                requiresDefault: true,
+                sortBy: ['groups'],
+              }),
               Columns.inventoryColumn('tags'),
               Columns.OperatingSystem,
             ]}
             remediationsEnabled={false}
             compact
             showActions={false}
-            query={GET_SYSTEMS_WITH_POLICIES}
             defaultFilter={
               osMajorVersion &&
               `os_major_version = ${osMajorVersion} AND os_minor_version ^ (${osMinorVersions.join(
@@ -118,6 +120,7 @@ export const EditPolicySystems = ({
             enableExport={false}
             preselectedSystems={selectedSystems}
             onSelect={onSystemSelect}
+            showGroupsFilter
           />
         </FormGroup>
       </Form>

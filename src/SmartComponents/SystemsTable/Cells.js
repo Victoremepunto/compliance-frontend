@@ -12,11 +12,11 @@ import DateFormat from '@redhat-cloud-services/frontend-components/DateFormat';
 import Truncate from '@redhat-cloud-services/frontend-components/Truncate';
 import {
   UnsupportedSSGVersion,
-  ComplianceScore as complianceScore,
+  ComplianceScore as PresentationalComplianceScore,
   LinkWithPermission as Link,
 } from 'PresentationalComponents';
 import {
-  profilesRulesFailed,
+  // profilesRulesFailed,
   complianceScoreData,
   NEVER,
 } from 'Utilities/ruleHelpers';
@@ -98,18 +98,6 @@ SSGVersions.propTypes = {
   testResultProfiles: propTypes.array,
 };
 
-export const DetailsLink = ({ id, testResultProfiles = [] }) =>
-  testResultProfiles.length > 0 ? (
-    <SystemLink {...{ id }}>View Report</SystemLink>
-  ) : (
-    ''
-  );
-
-DetailsLink.propTypes = {
-  id: propTypes.string,
-  testResultProfiles: propTypes.array,
-};
-
 export const Policies = ({ policies }) =>
   (policies || []).length > 0 && (
     <Truncate
@@ -124,11 +112,13 @@ Policies.propTypes = {
 };
 
 export const FailedRules = ({ id, testResultProfiles }) => {
-  const rulesFailed = profilesRulesFailed(testResultProfiles).length;
+  const rulesFailed = testResultProfiles.reduce(
+    (acc, { rulesFailed }) => acc + parseInt(rulesFailed || 0),
+    0
+  );
+
   return (
-    <SystemLink {...{ id }}>
-      {testResultProfiles.length > 0 ? rulesFailed : 'N/A'}
-    </SystemLink>
+    <SystemLink {...{ id }}>{rulesFailed > 0 ? rulesFailed : 'N/A'}</SystemLink>
   );
 };
 
@@ -138,10 +128,14 @@ FailedRules.propTypes = {
 };
 
 export { complianceScoreData };
-export const ComplianceScore = ({ testResultProfiles }) =>
-  testResultProfiles.length > 0
-    ? complianceScore(complianceScoreData(testResultProfiles))
-    : 'N/A';
+export const ComplianceScore = ({ testResultProfiles }) => {
+  const { score, supported, compliant } = testResultProfiles[0] || {};
+  return testResultProfiles.length > 0 ? (
+    <PresentationalComplianceScore {...{ score, supported, compliant }} />
+  ) : (
+    'N/A'
+  );
+};
 
 ComplianceScore.propTypes = {
   testResultProfiles: propTypes.array,
@@ -158,8 +152,10 @@ const NeverScanned = () => (
       </Fragment>
     }
   >
-    <ExclamationTriangleIcon color="var(--pf-global--warning-color--100)" />
-    {' ' + NEVER}
+    <div>
+      <ExclamationTriangleIcon color="var(--pf-v5-global--warning-color--100)" />
+      {' ' + NEVER}
+    </div>
   </Tooltip>
 );
 

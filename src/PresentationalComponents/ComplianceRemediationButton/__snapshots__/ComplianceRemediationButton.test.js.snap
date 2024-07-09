@@ -2,8 +2,16 @@
 
 exports[`ComplianceRemediationButton expect to render without error 1`] = `
 <div>
-  <button>
-    Remediation button mock
-  </button>
+  <div>
+    Button
+  </div>
+</div>
+`;
+
+exports[`ComplianceRemediationButton expect to render without error and selected rules 1`] = `
+<div>
+  <div>
+    Button
+  </div>
 </div>
 `;

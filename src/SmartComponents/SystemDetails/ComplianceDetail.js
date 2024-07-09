@@ -1,26 +1,19 @@
 import React, { useState } from 'react';
 import propTypes from 'prop-types';
+import { Tabs, Tab, TabTitleText } from '@patternfly/react-core';
 import SystemPolicyCards from '../../PresentationalComponents/SystemPolicyCards';
 import RulesTable from '@/PresentationalComponents/RulesTable/RulesTable';
 import ComplianceEmptyState from 'PresentationalComponents/ComplianceEmptyState';
-import { useQuery } from '@apollo/client';
-import gql from 'graphql-tag';
-import { ApolloClient, HttpLink, InMemoryCache } from 'apollo-boost';
-import { ApolloProvider } from '@apollo/client';
-
+import { useQuery, gql } from '@apollo/client';
 import { Spinner } from '@redhat-cloud-services/frontend-components/Spinner';
 import './compliance.scss';
 import { ErrorCard } from 'PresentationalComponents';
-import { IntlProvider } from 'react-intl';
-import { BrowserRouter as Router } from 'react-router-dom';
-import { Provider } from 'react-redux';
-import { init } from 'Store';
+import natsort from 'natsort';
+
 import EmptyState from './EmptyState';
 
-const COMPLIANCE_API_ROOT = '/api/compliance';
-
 const QUERY = gql`
-  query System($systemId: String!) {
+  query CD_System($systemId: String!) {
     system(id: $systemId) {
       id
       name
@@ -43,11 +36,13 @@ const QUERY = gql`
         osMajorVersion
         benchmark {
           version
+          ruleTree
         }
         policy {
           id
         }
         rules {
+          id
           title
           severity
           rationale
@@ -65,84 +60,72 @@ const QUERY = gql`
 `;
 
 const SystemQuery = ({ data: { system }, loading, hidePassed }) => {
-  const [selectedPolicies, setSelectedPolicies] = useState();
+  const [selectedPolicy, setSelectedPolicy] = useState(
+    system.testResultProfiles[0]?.id
+  );
   const policies = system?.testResultProfiles;
-  const setOrUnsetPolicy = (policy) => {
-    if (!policy) {
-      return;
-    }
-    const policyIncluded = selectedPolicies?.find(
-      (policyId) => policy?.id === policyId
-    );
-    if (policyIncluded) {
-      const newSelection = selectedPolicies?.filter(
-        (policyId) => policy.id !== policyId
-      );
-      setSelectedPolicies(newSelection.length > 0 ? newSelection : undefined);
-    } else {
-      setSelectedPolicies([...(selectedPolicies || []), policy?.id]);
-    }
-  };
 
-  const onDeleteFilter = (chips, clearAll) => {
-    const chipNames = chips
-      .find((chips) => chips.category === 'Policy')
-      ?.chips.map((chip) => chip.name);
-    const policyId = policies.find(({ name }) => chipNames?.includes(name))?.id;
-
-    if (policyId) {
-      !clearAll
-        ? setOrUnsetPolicy(
-            policyId
-              ? {
-                  id: policyId,
-                }
-              : {}
-          )
-        : setSelectedPolicies(undefined);
-    }
-  };
+  const sorter = natsort({ desc: false, insensitive: true });
+  const sortedTestResultProfiles = system?.testResultProfiles.sort(
+    (testResultProfile1, testResultProfile2) =>
+      sorter(testResultProfile1?.name, testResultProfile2?.name)
+  );
 
   return (
     <>
-      <SystemPolicyCards
-        policies={policies}
-        loading={loading}
-        selectedPolicies={selectedPolicies}
-        onCardClick={(policy) => {
-          setOrUnsetPolicy(policy);
-        }}
-      />
+      <SystemPolicyCards policies={policies} loading={loading} />
       <br />
       {system?.testResultProfiles?.length ? (
-        <RulesTable
-          ansibleSupportFilter
-          hidePassed={hidePassed}
-          system={{
-            ...system,
-            supported:
-              (system?.testResultProfiles || []).filter(
-                (profile) => profile.supported
-              ).length > 0,
-          }}
-          profileRules={system?.testResultProfiles.map((profile) => ({
-            system,
-            profile,
-            rules: profile.rules,
-          }))}
-          loading={loading}
-          options={{
-            sortBy: {
-              index: 4,
-              direction: 'asc',
-              property: 'severity',
-            },
-            onDeleteFilter,
-          }}
-          activeFilters={{
-            policy: selectedPolicies,
-          }}
-        />
+        <>
+          {system.testResultProfiles.length > 1 && (
+            <Tabs
+              activeKey={selectedPolicy}
+              style={{
+                background: 'var(--pf-v5-global--BackgroundColor--100)',
+              }}
+            >
+              {sortedTestResultProfiles.map((policy, idx) => {
+                return (
+                  <Tab
+                    key={'policy-tab-' + idx}
+                    eventKey={policy.id}
+                    title={<TabTitleText> {policy.name} </TabTitleText>}
+                    onClick={() => {
+                      setSelectedPolicy(policy.id);
+                    }}
+                  />
+                );
+              })}
+            </Tabs>
+          )}
+          <RulesTable
+            ansibleSupportFilter
+            hidePassed={hidePassed}
+            showFailedCounts
+            system={{
+              ...system,
+              supported:
+                (system?.testResultProfiles || []).filter(
+                  (profile) => profile.supported
+                ).length > 0,
+            }}
+            profileRules={system?.testResultProfiles
+              .filter((policy) => selectedPolicy === policy.id)
+              .map((profile) => ({
+                system,
+                profile,
+                rules: profile.rules,
+              }))}
+            loading={loading}
+            options={{
+              sortBy: {
+                index: 4,
+                direction: 'asc',
+                property: 'severity',
+              },
+            }}
+          />
+        </>
       ) : (
         <EmptyState system={system} />
       )}
@@ -169,8 +152,8 @@ SystemQuery.defaultProps = {
   loading: true,
 };
 
-export const SystemDetails = ({ inventoryId, hidePassed, ...props }) => {
-  let { data, error, loading } = useQuery(QUERY, {
+export const Details = ({ inventoryId, hidePassed, ...props }) => {
+  const { data, error, loading } = useQuery(QUERY, {
     variables: { systemId: inventoryId },
     fetchPolicy: 'no-cache',
   });
@@ -181,8 +164,8 @@ export const SystemDetails = ({ inventoryId, hidePassed, ...props }) => {
   }
 
   if (error && !is404) {
-    const errorMsg = `Oops! Error loading System data: ${error}`;
-    return <ErrorCard message={errorMsg} />;
+    // network errors other than 404 are unexpected
+    return <ErrorCard />;
   }
 
   return (
@@ -201,50 +184,9 @@ export const SystemDetails = ({ inventoryId, hidePassed, ...props }) => {
   );
 };
 
-SystemDetails.propTypes = {
+Details.propTypes = {
   inventoryId: propTypes.string,
   hidePassed: propTypes.bool,
 };
 
-const WrappedSystemDetails = ({
-  customItnl,
-  customRouter,
-  intlProps,
-  client,
-  ...props
-}) => {
-  const IntlWrapper = customItnl ? IntlProvider : React.Fragment;
-  const RouterWrapper = customRouter ? Router : React.Fragment;
-  const store = init().getStore();
-
-  return (
-    <RouterWrapper>
-      <IntlWrapper {...(customItnl && intlProps)}>
-        <ApolloProvider client={client}>
-          <Provider store={store}>
-            <SystemDetails {...props} />
-          </Provider>
-        </ApolloProvider>
-      </IntlWrapper>
-    </RouterWrapper>
-  );
-};
-
-WrappedSystemDetails.propTypes = {
-  customItnl: propTypes.bool,
-  intlProps: propTypes.any,
-  customRouter: propTypes.bool,
-  client: propTypes.object,
-};
-
-WrappedSystemDetails.defaultProps = {
-  client: new ApolloClient({
-    link: new HttpLink({
-      uri: COMPLIANCE_API_ROOT + '/graphql',
-      credentials: 'include',
-    }),
-    cache: new InMemoryCache(),
-  }),
-};
-
-export default WrappedSystemDetails;
+export default Details;

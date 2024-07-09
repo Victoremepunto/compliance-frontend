@@ -1,25 +1,21 @@
 /* eslint-disable react/display-name */
 import React from 'react';
-import gql from 'graphql-tag';
-import { useQuery } from '@apollo/client';
+import { gql, useQuery } from '@apollo/client';
 import { nowrap } from '@patternfly/react-table';
 import PageHeader, {
   PageHeaderTitle,
 } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
 import { StateViewPart, StateViewWithError } from 'PresentationalComponents';
 import { SystemsTable } from 'SmartComponents';
-import { GET_SYSTEMS_WITH_POLICIES } from '../SystemsTable/constants';
 import * as Columns from '../SystemsTable/Columns';
 
-const QUERY = gql`
+export const QUERY = gql`
   {
     profiles(search: "external = false and canonical = false") {
       edges {
         node {
           id
           name
-          refId
           osMajorVersion
         }
       }
@@ -36,9 +32,9 @@ export const ComplianceSystems = () => {
   return (
     <React.Fragment>
       <PageHeader className="page-header">
-        <PageHeaderTitle title="Compliance systems" />
+        <PageHeaderTitle title="Systems" />
       </PageHeader>
-      <Main>
+      <section className="pf-v5-c-page__main-section">
         <StateViewWithError stateValues={{ error, data, loading }}>
           <StateViewPart stateKey="data">
             {policies && (
@@ -46,6 +42,10 @@ export const ComplianceSystems = () => {
                 columns={[
                   Columns.customName({
                     showLink: true,
+                  }),
+                  Columns.inventoryColumn('groups', {
+                    requiresDefault: true,
+                    sortBy: ['groups'],
                   }),
                   Columns.inventoryColumn('tags'),
                   Columns.OS,
@@ -55,7 +55,6 @@ export const ComplianceSystems = () => {
                     transforms: [nowrap],
                   }),
                 ]}
-                query={GET_SYSTEMS_WITH_POLICIES}
                 defaultFilter={DEFAULT_FILTER}
                 systemProps={{
                   isFullView: true,
@@ -67,11 +66,12 @@ export const ComplianceSystems = () => {
                 enableEditPolicy={false}
                 remediationsEnabled={false}
                 policies={policies}
+                showGroupsFilter
               />
             )}
           </StateViewPart>
         </StateViewWithError>
-      </Main>
+      </section>
     </React.Fragment>
   );
 };
