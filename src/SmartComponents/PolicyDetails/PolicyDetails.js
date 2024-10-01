@@ -1,8 +1,6 @@
 import React, { Fragment, useEffect } from 'react';
-import propTypes from 'prop-types';
-import gql from 'graphql-tag';
+import PropTypes from 'prop-types';
 import { useParams, useLocation } from 'react-router-dom';
-import { useQuery } from '@apollo/client';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -13,7 +11,6 @@ import {
 import PageHeader, {
   PageHeaderTitle,
 } from '@redhat-cloud-services/frontend-components/PageHeader';
-import Main from '@redhat-cloud-services/frontend-components/Main';
 import Spinner from '@redhat-cloud-services/frontend-components/Spinner';
 import {
   PolicyDetailsDescription,
@@ -24,98 +21,63 @@ import {
   StateViewPart,
   RoutedTabs,
   BreadcrumbLinkItem,
-  BackgroundLink,
-  LinkButton,
 } from 'PresentationalComponents';
-import { useAnchor } from 'Utilities/Router';
 import { useTitleEntity } from 'Utilities/hooks/useDocumentTitle';
 import '@/Charts.scss';
 import PolicyRulesTab from './PolicyRulesTab';
 import PolicySystemsTab from './PolicySystemsTab';
 import PolicyMultiversionRules from './PolicyMultiversionRules';
 import './PolicyDetails.scss';
+import useSaveValueToPolicy from './hooks/useSaveValueToPolicy';
+import usePolicyQuery from 'Utilities/hooks/usePolicyQuery';
+import usePolicyQuery2 from '../../Utilities/hooks/usePolicyQuery/usePolicyQuery2';
+import useAPIV2FeatureFlag from '../../Utilities/hooks/useAPIV2FeatureFlag';
+import dataSerialiser from '../../Utilities/dataSerialiser';
 
-export const QUERY = gql`
-  query Profile($policyId: String!) {
-    profile(id: $policyId) {
-      id
-      name
-      refId
-      external
-      description
-      totalHostCount
-      compliantHostCount
-      complianceThreshold
-      osMajorVersion
-      lastScanned
-      policyType
-      policy {
-        id
-        name
-        refId
-        profiles {
-          id
-          name
-          refId
-          osMinorVersion
-          osMajorVersion
-          benchmark {
-            id
-            title
-            latestSupportedOsMinorVersions
-            osMajorVersion
-            version
-          }
-          rules {
-            title
-            severity
-            rationale
-            refId
-            description
-            remediationAvailable
-            identifier
-            precedence
-          }
-        }
-      }
-      businessObjective {
-        id
-        title
-      }
-      hosts {
-        id
-        osMinorVersion
-      }
-      rules {
-        title
-        severity
-        rationale
-        refId
-        description
-        remediationAvailable
-        identifier
-        precedence
-      }
-    }
-  }
-`;
+export const PolicyDetailsWrapper = ({ route }) => {
+  const apiV2Enabled = useAPIV2FeatureFlag();
 
-export const PolicyDetails = ({ route }) => {
-  const defaultTab = 'details';
+  const PolicyDetails = apiV2Enabled ? PolicyDetailsV2 : PolicyDetailsGraphQL;
+
+  return <PolicyDetails route={route} />;
+};
+
+const PolicyDetailsGraphQL = ({ route }) => {
   const { policy_id: policyId } = useParams();
-  const location = useLocation();
-  const anchor = useAnchor();
-  let { data, error, loading, refetch } = useQuery(QUERY, {
-    variables: { policyId },
+  const query = usePolicyQuery({
+    policyId,
   });
-  let policy;
-  let hasOsMinorProfiles = true;
-  if (data && !loading) {
-    policy = data.profile;
-    hasOsMinorProfiles = !!policy.policy.profiles.find(
-      (profile) => !!profile.osMinorVersion
-    );
-  }
+
+  return <PolicyDetailsBase query={query} route={route} />;
+};
+
+const PolicyDetailsV2 = ({ route }) => {
+  const { policy_id: policyId } = useParams();
+  const query = usePolicyQuery2({ policyId });
+  const data = query?.data?.data
+    ? {
+        profile: {
+          ...dataSerialiser(query.data.data, dataMap),
+          policy: { profiles: [] },
+        },
+      }
+    : {};
+
+  return <PolicyDetailsBase query={{ ...query, data }} route={route} />;
+};
+
+export const PolicyDetailsBase = ({ route, query }) => {
+  const defaultTab = 'details';
+  const { data, error, loading, refetch } = query;
+  const location = useLocation();
+  const policy = data?.profile;
+  const hasOsMinorProfiles = !!policy?.policy.profiles.find(
+    (profile) => !!profile.osMinorVersion
+  );
+
+  const saveToPolicy = useSaveValueToPolicy(policy, () => {
+    refetch();
+  });
 
   useEffect(() => {
     refetch();
@@ -124,17 +86,19 @@ export const PolicyDetails = ({ route }) => {
   useTitleEntity(route, policy?.name);
 
   return (
-    <StateViewWithError stateValues={{ error, data, loading }}>
+    <StateViewWithError
+      stateValues={{ error, data: policy && !loading, loading }}
+    >
       <StateViewPart stateKey="loading">
         <PageHeader>
           <PolicyDetailsContentLoader />
         </PageHeader>
-        <Main>
+        <section className="pf-v5-c-page__main-section">
           <Spinner />
-        </Main>
+        </section>
       </StateViewPart>
       <StateViewPart stateKey="data">
-        {policy && (
+        {policy ? (
           <Fragment>
             <PageHeader className="page-header-tabs">
               <Breadcrumb ouiaId="PolicyDetailsPathBreadcrumb">
@@ -148,26 +112,6 @@ export const PolicyDetails = ({ route }) => {
                 <GridItem xl2={11} xl={10} lg={12} md={12} sm={12}>
                   <PageHeaderTitle title={policy.name} />
                 </GridItem>
-                <GridItem
-                  className="policy-details-button"
-                  xl2={1}
-                  xl={2}
-                  lg={2}
-                  md={3}
-                  sm={3}
-                >
-                  <BackgroundLink
-                    to={`/scappolicies/${policy.id}/edit`}
-                    state={{ policy }}
-                    hash={anchor}
-                    backgroundLocation={{ hash: 'details' }}
-                    variant="secondary"
-                    ouiaId="EditPolicyButton"
-                    component={LinkButton}
-                  >
-                    Edit policy
-                  </BackgroundLink>
-                </GridItem>
               </Grid>
               <RoutedTabs
                 aria-label="Policy Tabs"
@@ -179,14 +123,18 @@ export const PolicyDetails = ({ route }) => {
                 <Tab title="Systems" id="policy-systems" eventKey="systems" />
               </RoutedTabs>
             </PageHeader>
-            <Main>
+            <section className="pf-v5-c-page__main-section">
               <TabSwitcher defaultTab={defaultTab}>
                 <ContentTab eventKey="details">
-                  <PolicyDetailsDescription policy={policy} />
+                  <PolicyDetailsDescription policy={policy} refetch={refetch} />
                 </ContentTab>
                 <ContentTab eventKey="rules">
                   {hasOsMinorProfiles ? (
-                    <PolicyMultiversionRules policy={policy} />
+                    <PolicyMultiversionRules
+                      policy={policy}
+                      saveToPolicy={saveToPolicy}
+                      onRuleValueReset={() => refetch()}
+                    />
                   ) : (
                     <PolicyRulesTab policy={policy} />
                   )}
@@ -195,16 +143,47 @@ export const PolicyDetails = ({ route }) => {
                   <PolicySystemsTab policy={policy} />
                 </ContentTab>
               </TabSwitcher>
-            </Main>
+            </section>
           </Fragment>
+        ) : (
+          ''
         )}
       </StateViewPart>
     </StateViewWithError>
   );
 };
 
-PolicyDetails.propTypes = {
-  route: propTypes.object,
+PolicyDetailsWrapper.propTypes = {
+  route: PropTypes.object,
 };
 
-export default PolicyDetails;
+PolicyDetailsGraphQL.propTypes = {
+  route: PropTypes.object,
+};
+
+PolicyDetailsV2.propTypes = {
+  route: PropTypes.object,
+};
+PolicyDetailsBase.propTypes = {
+  route: PropTypes.object,
+  query: PropTypes.shape({
+    data: PropTypes.oneOf([undefined, PropTypes.object]),
+    error: PropTypes.oneOf([undefined, PropTypes.string]),
+    loading: PropTypes.oneOf([undefined, false, true]),
+    refetch: PropTypes.func,
+  }),
+};
+
+export default PolicyDetailsWrapper;
+
+const dataMap = {
+  id: ['id', 'policy.id'],
+  title: 'name',
+  description: 'description',
+  business_objective: 'businessObjective.title',
+  compliance_threshold: 'complianceThreshold',
+  total_system_count: 'totalHostCount',
+  os_major_version: 'osMajorVersion',
+  profile_title: ['policy.name', 'policyType'],
+  ref_id: 'refId',
+};

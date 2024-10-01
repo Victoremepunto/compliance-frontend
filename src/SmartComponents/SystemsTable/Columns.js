@@ -1,14 +1,13 @@
+/* eslint-disable testing-library/render-result-naming-convention */
 import React from 'react';
 import { nowrap } from '@patternfly/react-table';
 import { Tooltip } from '@patternfly/react-core';
 import { complianceScoreString } from 'PresentationalComponents';
-import { profilesRulesFailed } from 'Utilities/ruleHelpers';
 import { renderComponent } from 'Utilities/helpers';
 
 import {
   Name as NameCell,
   ComplianceScore as ComplianceScoreCell,
-  DetailsLink as DetailsLinkCell,
   FailedRules as FailedRulesCell,
   LastScanned as LastScannedCell,
   Policies as PoliciesCell,
@@ -46,13 +45,14 @@ export const Name = compileColumnRenderFunc({
   cell: NameCell,
 });
 
-export const customName = (props) => ({
+export const customName = (props, columnConfig) => ({
   ...Name,
   props: {
     ...Name.props,
     ...props,
   },
   renderFunc: renderComponent(NameCell, props),
+  ...columnConfig,
 });
 
 export const SsgVersion = {
@@ -74,6 +74,7 @@ export const SsgVersion = {
 export const Policies = {
   title: 'Policies',
   transforms: [nowrap],
+  key: 'policies',
   exportKey: 'policies',
   renderExport: (policies) => policies.map(({ name }) => name).join(', '),
   props: {
@@ -83,36 +84,31 @@ export const Policies = {
   renderFunc: renderComponent(PoliciesCell),
 };
 
-export const DetailsLink = {
-  title: '',
-  export: false,
-  props: {
-    width: 20,
-    ...disableSorting,
-  },
-  renderFunc: renderComponent(DetailsLinkCell),
-};
-
 export const FailedRules = {
   title: 'Failed rules',
-  exportKey: 'testResultProfiles',
+  key: 'failedRules',
+  exportKey: 'profiles',
   transforms: [nowrap],
+  sortBy: ['rulesFailed'],
   props: {
     width: 5,
-    ...disableSorting,
   },
-  renderExport: (testResultProfiles) =>
-    profilesRulesFailed(testResultProfiles).length,
+  renderExport: (profiles) =>
+    profiles.reduce(
+      (failedRules, { rulesFailed }) => failedRules + rulesFailed,
+      0
+    ),
   renderFunc: renderComponent(FailedRulesCell),
 };
 
 export const ComplianceScore = {
   title: 'Compliance score',
+  key: 'complianceScore',
   exportKey: 'testResultProfiles',
+  sortBy: ['score'],
   transforms: [nowrap],
   props: {
     width: 5,
-    ...disableSorting,
   },
   renderExport: (testResultProfiles) =>
     complianceScoreString(complianceScoreData(testResultProfiles)).trim(),
@@ -121,6 +117,7 @@ export const ComplianceScore = {
 
 export const LastScanned = {
   title: 'Last scanned',
+  key: 'lastScanned',
   transforms: [nowrap],
   exportKey: 'testResultProfiles',
   props: {

@@ -1,35 +1,34 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { usePolicy } from 'Mutations';
-import { useLinkToBackground, useAnchor } from 'Utilities/Router';
 import { dispatchNotification } from 'Utilities/Dispatcher';
+import { apiInstance } from '../../Utilities/hooks/useQuery';
+import useAPIV2FeatureFlag from '../../Utilities/hooks/useAPIV2FeatureFlag';
 
-export const useLinkToPolicy = () => {
-  const anchor = useAnchor();
-  const linkToBackground = useLinkToBackground('/scappolicies');
-  return () => {
-    linkToBackground({ hash: anchor });
-  };
-};
-
-export const useOnSave = (policy, updatedPolicyHostsAndRules) => {
-  const updatePolicy = usePolicy();
-  const linkToPolicy = useLinkToPolicy();
+export const useOnSave = (
+  policy,
+  updatedPolicyHostsAndRules,
+  { onSave: onSaveCallback, onError: onErrorCallback } = {}
+) => {
+  const apiV2Enabled = useAPIV2FeatureFlag();
+  const updatePolicyGraphQL = usePolicy();
+  const updatePolicy = apiV2Enabled ? updatePolicyV2 : updatePolicyGraphQL;
   const [isSaving, setIsSaving] = useState(false);
-  const onSave = () => {
+
+  const onSave = useCallback(() => {
     if (isSaving) {
       return Promise.resolve({});
     }
 
     setIsSaving(true);
     updatePolicy(policy, updatedPolicyHostsAndRules)
-      .then(() => {
+      .then((policy) => {
         setIsSaving(false);
         dispatchNotification({
           variant: 'success',
           title: 'Policy updated',
           autoDismiss: true,
         });
-        linkToPolicy();
+        onSaveCallback?.(policy);
       })
       .catch((error) => {
         setIsSaving(false);
@@ -38,9 +37,17 @@ export const useOnSave = (policy, updatedPolicyHostsAndRules) => {
           title: 'Error updating policy',
           description: error.message,
         });
-        linkToPolicy();
+        onErrorCallback?.();
       });
-  };
+  }, [isSaving, policy, updatedPolicyHostsAndRules]);
 
   return [isSaving, onSave];
+};
+
+const updatePolicyV2 = async (policy, updatedPolicy) => {
+  return await apiInstance.updatePolicy(policy.id, null, {
+    description: updatedPolicy?.description,
+    business_objective: updatedPolicy?.businessObjective?.title ?? '--',
+    compliance_threshold: parseFloat(updatedPolicy?.complianceThreshold),
+  });
 };
